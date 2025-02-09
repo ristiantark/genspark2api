@@ -12,6 +12,9 @@ RUN go build -o /genspark2api
 # 使用 Ubuntu 作为最终镜像
 FROM ubuntu:20.04
 
+# 确保使用 root 用户
+USER root
+
 # 安装必要的工具和 Warp 客户端
 RUN apt-get update && apt-get install -y \
     ca-certificates \
@@ -33,8 +36,11 @@ COPY --from=builder /genspark2api /app/genspark2api
 COPY warp-config.sh /app/warp-config.sh
 RUN chmod +x /app/warp-config.sh
 
-# 创建挂载点
-RUN mkdir -p /app/genspark2api/data
+# 创建挂载点并设置权限
+RUN mkdir -p /app/genspark2api/data && chmod 777 /app/genspark2api/data
+
+# 或者使用 VOLUME 指令（如果选择这种方式，请注释掉上面的 RUN 命令）
+# VOLUME /app/genspark2api/data
 
 # 暴露端口
 EXPOSE 7055
