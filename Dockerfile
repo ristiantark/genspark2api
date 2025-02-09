@@ -33,11 +33,14 @@ COPY --from=builder /genspark2api /app/genspark2api
 COPY warp-config.sh /app/warp-config.sh
 RUN chmod +x /app/warp-config.sh
 
+# 创建挂载点
+RUN mkdir -p /app/genspark2api/data
+
 # 暴露端口
 EXPOSE 7055
 
 # 设置工作目录
-WORKDIR /app/genspark2api/data
+WORKDIR /app/genspark2api
 
 # 设置启动命令
 CMD ["/bin/bash", "-c", "/app/warp-config.sh && /app/genspark2api"]
