@@ -1,6 +1,6 @@
 module genspark2api
 
-go 1.23
+go 1.20
 
 require (
 	github.com/deanxv/CycleTLS/cycletls v0.0.0-20250208062300-063369d205a8
