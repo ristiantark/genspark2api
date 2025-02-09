@@ -1,35 +1,43 @@
 # 使用 Golang 镜像作为构建阶段
 FROM golang AS builder
-
-# 设置环境变量
 ENV GO111MODULE=on \
     CGO_ENABLED=0 \
     GOOS=linux
-
-# 设置工作目录
 WORKDIR /build
-
-# 复制 go.mod 和 go.sum 文件,先下载依赖
 COPY go.mod go.sum ./
-#ENV GOPROXY=https://goproxy.cn,direct
 RUN go mod download
-
-# 复制整个项目并构建可执行文件
 COPY . .
 RUN go build -o /genspark2api
 
-# 使用 Alpine 镜像作为最终镜像
-FROM alpine
+# 使用 Ubuntu 作为最终镜像
+FROM ubuntu:20.04
 
-# 安装基本的运行时依赖
-RUN apk --no-cache add ca-certificates tzdata
+# 安装必要的工具和 Warp 客户端
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    tzdata \
+    gnupg \
+    iproute2 \
+    && curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ focal main" | tee /etc/apt/sources.list.d/cloudflare-client.list \
+    && apt-get update \
+    && apt-get install -y cloudflare-warp \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# 从构建阶段复制可执行文件
-COPY --from=builder /genspark2api .
+# 复制应用程序
+COPY --from=builder /genspark2api /app/genspark2api
+
+# 添加 Warp 配置脚本
+COPY warp-config.sh /app/warp-config.sh
+RUN chmod +x /app/warp-config.sh
 
 # 暴露端口
 EXPOSE 7055
-# 工作目录
+
+# 设置工作目录
 WORKDIR /app/genspark2api/data
-# 设置入口命令
-ENTRYPOINT ["/genspark2api"]
+
+# 设置启动命令
+CMD ["/bin/bash", "-c", "/app/warp-config.sh && /app/genspark2api"]
