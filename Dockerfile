@@ -1,52 +1,56 @@
-# 使用 Golang 镜像作为构建阶段
-FROM golang AS builder
+# Stage 1: 构建阶段，使用 Golang 镜像构建二进制文件
+FROM golang:1.20 AS builder
+
+# 设置环境变量
 ENV GO111MODULE=on \
     CGO_ENABLED=0 \
     GOOS=linux
+
+# 设置工作目录
 WORKDIR /build
+
+# 先复制 go.mod 和 go.sum 下载依赖
 COPY go.mod go.sum ./
 RUN go mod download
+
+# 复制所有源码并构建生成可执行文件
 COPY . .
 RUN go build -o /genspark2api
 
-# 使用 Ubuntu 作为最终镜像
-FROM ubuntu:20.04
+# Stage 2: 最终镜像，使用 Debian 作为运行环境
+FROM debian:bullseye-slim
 
-# 确保使用 root 用户
-USER root
-
-# 安装必要的工具和 Warp 客户端
+# 安装应用运行时依赖及 Warp 客户端所需工具
 RUN apt-get update && apt-get install -y \
     ca-certificates \
-    curl \
     tzdata \
+    curl \
+    iptables \
     gnupg \
-    iproute2 \
-    && curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ focal main" | tee /etc/apt/sources.list.d/cloudflare-client.list \
-    && apt-get update \
-    && apt-get install -y cloudflare-warp \
-    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制应用程序
-COPY --from=builder /genspark2api /app/genspark2api
+# 安装 Cloudflare Warp 客户端
+RUN curl https://pkg.cloudflareclient.com/pubkey.gpg | apt-key add - && \
+    echo "deb http://pkg.cloudflareclient.com/ bullseye main" | tee /etc/apt/sources.list.d/cloudflare-client.list && \
+    apt-get update && apt-get install -y cloudflare-warp && \
+    rm -rf /var/lib/apt/lists/*
 
-# 添加 Warp 配置脚本
-COPY warp-config.sh /app/warp-config.sh
-RUN chmod +x /app/warp-config.sh
+# 将 warp 脚本复制到镜像中，并赋予执行权限
+COPY warp.sh /usr/local/bin/warp.sh
+RUN chmod +x /usr/local/bin/warp.sh
 
-# 创建挂载点并设置权限
-RUN mkdir -p /app/genspark2api/data && chmod 777 /app/genspark2api/data
+# 将启动入口脚本复制到镜像中，并赋予执行权限
+COPY start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
 
-# 或者使用 VOLUME 指令（如果选择这种方式，请注释掉上面的 RUN 命令）
-# VOLUME /app/genspark2api/data
+# 从构建阶段复制生成的应用二进制文件
+COPY --from=builder /genspark2api /genspark2api
 
-# 暴露端口
+# 暴露应用端口
 EXPOSE 7055
 
-# 设置工作目录
-WORKDIR /app/genspark2api
+# 如有需要，可设置工作目录（例如你的应用在 /app/genspark2api/data 下读取数据）
+WORKDIR /app/genspark2api/data
 
-# 设置启动命令
-CMD ["/bin/bash", "-c", "/app/warp-config.sh && /app/genspark2api"]
+# 设置容器启动入口为启动脚本
+ENTRYPOINT ["/usr/local/bin/start.sh"]
