@@ -4,18 +4,19 @@ FROM golang:1.20 AS builder
 # 设置环境变量
 ENV GO111MODULE=on \
     CGO_ENABLED=0 \
-    GOOS=linux
+    GOOS=linux \
+    GOFLAGS=-v
 
 # 设置工作目录
 WORKDIR /build
 
 # 先复制 go.mod 和 go.sum 下载依赖
 COPY go.mod go.sum ./
-RUN go mod download
+RUN go mod download -x
 
 # 复制所有源码并构建生成可执行文件
 COPY . .
-RUN go build -o /genspark2api
+RUN go build -v -x -o /genspark2api
 
 # Stage 2: 最终镜像，使用 Debian 作为运行环境
 FROM debian:bullseye-slim
